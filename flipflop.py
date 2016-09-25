@@ -54,6 +54,7 @@ import threading
 import fcntl
 import resource
 import traceback
+import html
 
 # Constants from the spec.
 FCGI_LISTENSOCK_FILENO = 0
@@ -457,13 +458,29 @@ class Request(object):
             traceback.print_exc(file=self.stderr)
             self.stderr.flush()
             if not self.stdout.data_written:
-                self.stdout.write(
-                    b'Status: 500 Internal Server Error\r\n'
-                    b'Content-Type: text/html\r\n\r\n'
-                    b'<!doctype html>\r\n'
-                    b'<title>Unhandled Exception</title>\r\n'
-                    b'<h1>Unhandled Exception</h1>\r\n'
-                    b'Unhandled exception thrown by the application.\r\n')
+                message = b'Unhandled exception thrown by the application.\n'
+                if 'DEBUG' in os.environ:
+                    if os.environ['DEBUG'].upper() in ['1', 'TRUE']:
+                        tb = traceback.format_exc()
+                        message = \
+                                b'<pre>\n' \
+                                + html.escape(tb).encode() + \
+                                b'</pre>\n'
+                headers = \
+                    b'Status: 500 Internal Server Error\r\n' \
+                    b'Content-Type: text/html\r\n'
+                body = \
+                    b'<!DOCTYPE html>\n' \
+                    b'<html>\n' \
+                    b'<head><title>Unhandled Exception</title></head>\n' \
+                    b'<body>\n' \
+                    b'<h1>Unhandled Exception</h1>\n' \
+                    + message + \
+                    b'</body></html>'
+                headers += \
+                    b'Content-Length: ' \
+                    + str(len(body)).encode() + b'\r\n'
+                self.stdout.write(headers + b'\r\n' + body)
             protocol_status, app_status = FCGI_REQUEST_COMPLETE, 0
 
         try:
